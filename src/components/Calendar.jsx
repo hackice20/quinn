@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
 import { journalData } from '../data';
 import JournalModal from './JournalModal';
 
@@ -16,6 +16,7 @@ const Calendar = ({ onMonthChange }) => {
   const observer = useRef();
   const lastMonthElementRef = useRef();
   const monthRefs = useRef(new Map());
+  const calendarContainerRef = useRef(null);
 
   const journalEntriesByDate = useMemo(() => {
     const map = new Map();
@@ -88,7 +89,7 @@ const Calendar = ({ onMonthChange }) => {
     observer.current = new IntersectionObserver(handleObserver, {
       root: null,
       rootMargin: '200px',
-      threshold: 1.0
+      threshold: 0.1
     });
 
     if (lastMonthElementRef.current) {
@@ -100,6 +101,17 @@ const Calendar = ({ onMonthChange }) => {
         observer.current.disconnect();
       }
     };
+  }, [monthsToDisplay]);
+
+  useLayoutEffect(() => {
+    const container = calendarContainerRef.current;
+    if (container && container.scrollHeight <= window.innerHeight) {
+      setMonthsToDisplay(prev => {
+        const lastMonth = prev[prev.length - 1];
+        const nextMonthDate = new Date(lastMonth.year, lastMonth.month + 1, 1);
+        return [...prev, { year: nextMonthDate.getFullYear(), month: nextMonthDate.getMonth() }];
+      });
+    }
   }, [monthsToDisplay]);
 
   const monthNames = [
@@ -117,7 +129,7 @@ const Calendar = ({ onMonthChange }) => {
 
   return (
     <>
-      <div className="container mx-auto p-4 text-white">
+      <div ref={calendarContainerRef} className="container mx-auto p-4 text-white">
         {monthsToDisplay.map((date, index) => {
           const monthName = monthNames[date.month];
           const year = date.year;
