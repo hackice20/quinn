@@ -12,7 +12,7 @@ const StarRating = ({ rating }) => {
   for (let i = 0; i < emptyStars; i++) {
     stars.push(<span key={`empty-${i}`} className="text-gray-500 text-xs">★</span>);
   }
-  return <div className="flex">{stars}</div>;
+  return <div className="flex -ml-0.5">{stars}</div>;
 };
 
 const CategoryIcons = ({ categories }) => {
@@ -64,19 +64,35 @@ const CategoryIcons = ({ categories }) => {
 
 const Calendar = ({ onMonthChange }) => {
   const [selectedEntryIndex, setSelectedEntryIndex] = useState(null);
+  
   const [monthsToDisplay, setMonthsToDisplay] = useState(() => {
-    const initialYear = 2025;
     const months = [];
-    for (let i = 0; i < 12; i++) {
-      months.push({ year: initialYear, month: i });
+    for (let i = -12; i <= 12; i++) {
+      const date = new Date(2025, 8 + i, 1);
+      months.push({ year: date.getFullYear(), month: date.getMonth() });
     }
     return months;
   });
 
   const calendarContainerRef = useRef(null);
   const monthRefs = useRef(new Map());
-  const observer = useRef();
-  const lastMonthElementRef = useRef();
+  const [prevScrollHeight, setPrevScrollHeight] = useState(0);
+  const hasScrolledToInitial = useRef(false);
+  
+  const topSentinelRef = useRef(null);
+  const bottomSentinelRef = useRef(null);
+  const september2025Ref = useRef(null);
+
+  const calendarDays = useMemo(() => {
+    if (!monthsToDisplay.length) return { emptyDays: [], days: [] };
+    const firstMonthDate = new Date(monthsToDisplay[0].year, monthsToDisplay[0].month, 1);
+    const emptyDays = Array(firstMonthDate.getDay()).fill(null);
+    const days = monthsToDisplay.flatMap(({ year, month }) => {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      return Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1));
+    });
+    return { emptyDays, days };
+  }, [monthsToDisplay]);
 
   const journalEntriesByDate = useMemo(() => {
     const map = new Map();
@@ -96,91 +112,132 @@ const Calendar = ({ onMonthChange }) => {
   const handlePrevEntry = () => { if (selectedEntryIndex !== null && selectedEntryIndex > 0) setSelectedEntryIndex(selectedEntryIndex - 1); };
   const handleNextEntry = () => { if (selectedEntryIndex !== null && selectedEntryIndex < journalData.length - 1) setSelectedEntryIndex(selectedEntryIndex + 1); };
 
+  useLayoutEffect(() => {
+    if (september2025Ref.current && !hasScrolledToInitial.current) {
+      const topPos = september2025Ref.current.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: topPos - (window.innerHeight / 4), behavior: 'instant' });
+      hasScrolledToInitial.current = true;
+      onMonthChange(new Date(2025, 8));
+    }
+  }, [calendarDays, onMonthChange]);
+
   useEffect(() => {
-    const scrollObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const { year, month } = JSON.parse(entry.target.dataset.date);
-          onMonthChange(new Date(year, month));
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setPrevScrollHeight(document.body.scrollHeight);
+          setMonthsToDisplay(prev => {
+            const firstMonth = prev[0];
+            const newMonths = [];
+            for (let i = 1; i <= 6; i++) {
+              const newDate = new Date(firstMonth.year, firstMonth.month - i, 1);
+              newMonths.push({ year: newDate.getFullYear(), month: newDate.getMonth() });
+            }
+            return [...newMonths.reverse(), ...prev];
+          });
         }
-      });
-    }, { root: null, rootMargin: "0px 0px -80% 0px", threshold: 0 });
-
-    monthRefs.current.forEach(ref => { if (ref) scrollObserver.observe(ref); });
-    return () => scrollObserver.disconnect();
-  }, [monthsToDisplay, onMonthChange]);
+      },
+      { root: null, rootMargin: "400px" }
+    );
+    if (topSentinelRef.current) observer.observe(topSentinelRef.current);
+    return () => observer.disconnect();
+  }, [monthsToDisplay]);
 
   useEffect(() => {
-    const handleObserver = (entries) => {
-      if (entries[0].isIntersecting) {
-        setMonthsToDisplay(prev => {
-          const lastMonth = prev[prev.length - 1];
-          const nextMonthDate = new Date(lastMonth.year, lastMonth.month + 1, 1);
-          return [...prev, { year: nextMonthDate.getFullYear(), month: nextMonthDate.getMonth() }];
-        });
-      }
-    };
-    observer.current = new IntersectionObserver(handleObserver, { root: null, rootMargin: '200px', threshold: 0.1 });
-    if (lastMonthElementRef.current) observer.current.observe(lastMonthElementRef.current);
-    return () => { if (observer.current) observer.current.disconnect(); };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setMonthsToDisplay(prev => {
+            const lastMonth = prev[prev.length - 1];
+            const newMonths = [];
+            for (let i = 1; i <= 6; i++) {
+              const newDate = new Date(lastMonth.year, lastMonth.month + i, 1);
+              newMonths.push({ year: newDate.getFullYear(), month: newDate.getMonth() });
+            }
+            return [...prev, ...newMonths];
+          });
+        }
+      },
+      { root: null, rootMargin: "400px" }
+    );
+    if (bottomSentinelRef.current) observer.observe(bottomSentinelRef.current);
+    return () => observer.disconnect();
   }, [monthsToDisplay]);
 
   useLayoutEffect(() => {
-    if (calendarContainerRef.current && calendarContainerRef.current.scrollHeight <= window.innerHeight) {
-      setMonthsToDisplay(prev => {
-        const lastMonth = prev[prev.length - 1];
-        const nextMonthDate = new Date(lastMonth.year, lastMonth.month + 1, 1);
-        return [...prev, { year: nextMonthDate.getFullYear(), month: nextMonthDate.getMonth() }];
-      });
+    if (prevScrollHeight) {
+      window.scrollTo(0, document.body.scrollHeight - prevScrollHeight);
+      setPrevScrollHeight(0);
     }
-  }, [monthsToDisplay]);
+  }, [prevScrollHeight]);
+  
+  useEffect(() => {
+    const monthHeaderObserver = new IntersectionObserver((entries) => {
+      const visibleMonths = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
+      if (visibleMonths.length > 0) {
+        const topMostVisible = visibleMonths[0];
+        if (topMostVisible.target.dataset.date) {
+            const { year, month } = JSON.parse(topMostVisible.target.dataset.date);
+            onMonthChange(new Date(year, month));
+        }
+      }
+    }, { root: null, rootMargin: `0px 0px -${window.innerHeight - 150}px 0px`});
+
+    monthRefs.current.forEach(ref => {
+        if (ref) monthHeaderObserver.observe(ref);
+    });
+    return () => monthHeaderObserver.disconnect();
+  }, [monthsToDisplay, onMonthChange]);
 
   return (
     <>
       <div ref={calendarContainerRef} className="max-w-4xl mx-auto p-4">
-        <div className="grid grid-cols-7 text-center font-bold text-gray-500 border-b border-gray-200 pb-2 mb-2">
-           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => <div key={day}>{day}</div>)}
+        <div ref={topSentinelRef} />
+        <div className="grid grid-cols-7 text-center font-bold text-gray-500 border-b border-gray-200 pb-2 mb-2 sticky top-12 bg-white z-10">
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => <div key={day}>{day}</div>)}
         </div>
-        {monthsToDisplay.map((date, index) => {
-          const year = date.year;
-          const month = date.month;
-          const isLastElement = index === monthsToDisplay.length - 1;
-          const firstDay = new Date(year, month, 1).getDay();
-          const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-          return (
-            <div
-              key={`${year}-${month}`}
-              ref={el => {
-                monthRefs.current.set(`${year}-${month}`, el);
-                if (isLastElement) lastMonthElementRef.current = el;
-              }}
-              data-date={JSON.stringify({ year, month })}
-            >
-              <div className="grid grid-cols-7 border-l border-gray-200">
-                {Array.from({ length: firstDay }).map((_, i) => (
-                  <div key={`empty-${i}`} className="border-r border-b border-gray-200 aspect-[3/4]"></div>
-                ))}
-                {Array.from({ length: daysInMonth }).map((_, i) => {
-                  const dayNumber = i + 1;
-                  const currentDate = new Date(year, month, dayNumber);
-                  const journalEntry = journalEntriesByDate.get(currentDate.toDateString());
-                  return (
-                    <div key={i} className="border-r border-b border-gray-200 p-1 aspect-[3/4] flex flex-col relative text-black" onClick={() => journalEntry && handleOpenModal(journalEntry)}>
-                      {journalEntry && (
-                        <div className="absolute inset-0">
-                          <img src={journalEntry.imgUrl} alt="Journal" className="w-full h-full object-cover"/>
-                          <div className="absolute inset-0 bg-black opacity-30"></div>
+        <div className="grid grid-cols-7 border-l border-gray-200">
+          {calendarDays.emptyDays.map((_, i) => <div key={`empty-${i}`} className="border-r border-b border-gray-200 aspect-[3/4]"></div>)}
+          {calendarDays.days.map((date) => {
+            const journalEntry = journalEntriesByDate.get(date.toDateString());
+            const isSept2025 = date.getFullYear() === 2025 && date.getMonth() === 8 && date.getDate() === 1;
+            return (
+              <div
+                key={date.toString()}
+                ref={el => {
+                  if (date.getDate() === 1) monthRefs.current.set(`${date.getFullYear()}-${date.getMonth()}`, el);
+                  if (isSept2025) september2025Ref.current = el;
+                }}
+                data-date={date.getDate() === 1 ? JSON.stringify({ year: date.getFullYear(), month: date.getMonth() }) : undefined}
+                className="border-r border-b border-gray-200 aspect-[3/4] flex flex-col relative text-black"
+                onClick={() => journalEntry && handleOpenModal(journalEntry)}
+              >
+                {journalEntry ? (
+                  <>
+                    <img src={journalEntry.imgUrl} alt="Journal" className="absolute inset-0 w-full h-full object-cover"/>
+                    <div className="absolute inset-0 bg-black opacity-30"></div>
+                    <div className="relative z-10 text-white p-1 flex flex-col justify-between h-full">
+                      <div>
+                        <div className="flex justify-between items-baseline">
+                          <span className="font-bold text-base">{date.getDate()}</span>
+                          <span className="text-xs">{new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)}</span>
                         </div>
-                      )}
-                      <span className={`font-bold self-start relative z-10 ${journalEntry ? 'text-white' : 'text-black'}`}>{dayNumber}</span>
+                        <StarRating rating={journalEntry.rating} />
+                      </div>
+                      <CategoryIcons categories={journalEntry.categories} />
                     </div>
-                  );
-                })}
+                  </>
+                ) : (
+                  <span className="font-bold self-start p-1">{date.getDate()}</span>
+                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <div ref={bottomSentinelRef} />
       </div>
       {selectedEntryIndex !== null && (
         <JournalModal
