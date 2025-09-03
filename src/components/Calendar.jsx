@@ -62,7 +62,7 @@ const CategoryIcons = ({ categories }) => {
     );
 };
 
-const Calendar = ({ onMonthChange }) => {
+const Calendar = ({ currentDate, onMonthChange }) => {
   const [selectedEntryIndex, setSelectedEntryIndex] = useState(null);
   
   const [monthsToDisplay, setMonthsToDisplay] = useState(() => {
@@ -109,8 +109,6 @@ const Calendar = ({ onMonthChange }) => {
     setSelectedEntryIndex(entryIndex);
   };
   const handleCloseModal = () => setSelectedEntryIndex(null);
-  const handlePrevEntry = () => { if (selectedEntryIndex !== null && selectedEntryIndex > 0) setSelectedEntryIndex(selectedEntryIndex - 1); };
-  const handleNextEntry = () => { if (selectedEntryIndex !== null && selectedEntryIndex < journalData.length - 1) setSelectedEntryIndex(selectedEntryIndex + 1); };
 
   useLayoutEffect(() => {
     if (september2025Ref.current && !hasScrolledToInitial.current) {
@@ -200,10 +198,18 @@ const Calendar = ({ onMonthChange }) => {
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => <div key={day}>{day}</div>)}
         </div>
         <div className="grid grid-cols-7 border-l border-gray-200">
-          {calendarDays.emptyDays.map((_, i) => <div key={`empty-${i}`} className="border-r border-b border-gray-200 aspect-[3/4]"></div>)}
+          {calendarDays.emptyDays.map((_, i) => {
+            const isSunday = i === 0;
+            return (
+              <div key={`empty-${i}`} className={`border-r border-b border-gray-200 aspect-[3/4] ${isSunday ? 'bg-gray-50' : ''}`}></div>
+            )
+          })}
           {calendarDays.days.map((date) => {
             const journalEntry = journalEntriesByDate.get(date.toDateString());
             const isSept2025 = date.getFullYear() === 2025 && date.getMonth() === 8 && date.getDate() === 1;
+            const isSunday = date.getDay() === 0;
+            const isCurrentMonth = currentDate && date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear();
+
             return (
               <div
                 key={date.toString()}
@@ -212,7 +218,7 @@ const Calendar = ({ onMonthChange }) => {
                   if (isSept2025) september2025Ref.current = el;
                 }}
                 data-date={date.getDate() === 1 ? JSON.stringify({ year: date.getFullYear(), month: date.getMonth() }) : undefined}
-                className="border-r border-b border-gray-200 aspect-[3/4] flex flex-col relative text-black"
+                className={`border-r border-b border-gray-200 aspect-[3/4] flex flex-col relative text-black ${isSunday ? 'bg-gray-50' : ''}`}
                 onClick={() => journalEntry && handleOpenModal(journalEntry)}
               >
                 {journalEntry ? (
@@ -231,7 +237,7 @@ const Calendar = ({ onMonthChange }) => {
                     </div>
                   </>
                 ) : (
-                  <span className="font-bold self-start p-1">{date.getDate()}</span>
+                  <span className={`font-bold self-start p-1 ${isCurrentMonth ? 'text-black' : 'text-gray-400'}`}>{date.getDate()}</span>
                 )}
               </div>
             );
@@ -241,12 +247,9 @@ const Calendar = ({ onMonthChange }) => {
       </div>
       {selectedEntryIndex !== null && (
         <JournalModal
-          entry={journalData[selectedEntryIndex]}
+          entries={journalData}
+          startIndex={selectedEntryIndex}
           onClose={handleCloseModal}
-          onPrev={handlePrevEntry}
-          onNext={handleNextEntry}
-          hasPrev={selectedEntryIndex > 0}
-          hasNext={selectedEntryIndex < journalData.length - 1}
         />
       )}
     </>

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import Calendar from './components/Calendar';
+import BottomNavBar from './components/BottomNavBar';
+import FloatingActionButton from './components/FloatingActionButton';
 
 const monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -28,8 +30,10 @@ function App() {
         </div>
       </nav>
       <main>
-        <Calendar onMonthChange={handleMonthChange} />
+        <Calendar currentDate={currentDate} onMonthChange={handleMonthChange} />
       </main>
+      <BottomNavBar />
+      <FloatingActionButton />
     </div>
   )
 }
